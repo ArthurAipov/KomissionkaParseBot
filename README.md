@@ -117,6 +117,45 @@ docker compose up -d --no-build
 Не используйте глобальные очистки Docker или перезапуск всего Docker для обновления
 этого приложения на общем сервере.
 
+### Telegram через VLESS/REALITY
+
+Если сервер не может подключиться к Telegram напрямую, можно включить дополнительный
+`compose.vpn.yaml`. Он запускает официальный Xray-клиент с закреплённым digest образа.
+SOCKS-порт не публикуется на хосте; сеть между ботом и Xray изолирована от остальных
+сервисов. Xray имеет отдельную сеть для выхода к VPN-серверу. Маршруты хоста,
+Docker daemon и других проектов не меняются; `NET_ADMIN` и режим `privileged` не нужны.
+
+```bash
+cd /opt/komissionki-watcher
+install -d -m 700 .secrets
+cp deploy/xray.example.json .secrets/xray.json
+# Заполнить .secrets/xray.json данными своей VLESS/REALITY-подписки.
+# Если строка подключения содержит flow, добавить его в settings.vnext[0].users[0].
+chown 65532:65532 .secrets/xray.json
+chmod 600 .secrets/xray.json
+# Добавить в .env одну строку:
+# COMPOSE_FILE=compose.yaml:compose.vpn.yaml
+docker compose config --quiet
+docker compose run --rm --no-deps telegram-vpn run -test -config /etc/xray/config.json
+docker compose build api
+docker compose up -d --no-build
+docker compose logs --tail=30 telegram-vpn bot
+```
+
+Файл `.secrets/xray.json` исключён из Git и контекста сборки. На сервере он читается
+только root и UID 65532 контейнера Xray через отдельный read-only bind mount.
+Xray ограничен 128 МБ памяти и 0,5 CPU. `COMPOSE_FILE` сохраняется в приватном `.env`,
+поэтому последующие обычные команды `docker compose` учитывают VPN-конфигурацию.
+
+Через этот клиент идут запросы Telegram Bot API, включая получение команд и отправку
+сообщений/альбомов. HTTPS-проверка сертификатов остаётся включённой. При недоступности
+прокси бот получает сетевую ошибку и не переключается на прямое соединение автоматически.
+API, PostgreSQL, парсер магазина и загрузка фотографий с CDN используют обычную сеть.
+
+Вместо VLESS-клиента можно задать `TELEGRAM_PROXY_URL` в `.env` для существующего
+HTTP/SOCKS4/SOCKS5-прокси; при этом `compose.vpn.yaml` подключать не нужно.
+Без настройки прокси бот использует прямое соединение.
+
 ## Команды пользователя
 
 - `/start` — регистрация и выбор подписок.

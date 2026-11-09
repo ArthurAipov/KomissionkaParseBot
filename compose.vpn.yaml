@@ -1,0 +1,34 @@
+# Optional VLESS/REALITY client. No proxy ports are published on the host.
+services:
+  telegram-vpn:
+    image: ghcr.io/xtls/xray-core@sha256:ceabeac03a89d991d2a247361825c1d1d2e9c91cd5dc010f298c7dc0c2f325c9
+    command: ["run", "-config", "/etc/xray/config.json"]
+    user: "65532:65532"
+    volumes:
+      - ./.secrets/xray.json:/etc/xray/config.json:ro
+    networks: [telegram_proxy, telegram_egress]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.5
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  bot:
+    environment:
+      TELEGRAM_PROXY_URL: socks5://telegram-vpn:1080
+    networks: [default, telegram_proxy]
+    depends_on:
+      telegram-vpn:
+        condition: service_started
+
+networks:
+  default: {}
+  telegram_proxy:
+    internal: true
+  telegram_egress: {}

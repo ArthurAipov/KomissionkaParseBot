@@ -1,16 +1,18 @@
 import logging
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
 
     database_url: str = "postgresql+psycopg://watcher:watcher@localhost:5432/watcher"
     api_key: SecretStr
     bot_token: SecretStr = SecretStr("")
+    telegram_proxy_url: SecretStr = SecretStr("")
     api_base_url: str = "http://localhost:8000"
     scan_interval_seconds: int = Field(1800, ge=300)
     request_delay_seconds: float = Field(5, ge=5)
@@ -30,6 +32,29 @@ class Settings(BaseSettings):
     backups_dir: str = ".backups"
     host_disk_path: str = "."
     disk_warn_free_mb: int = Field(2048, ge=128)
+
+    @field_validator("telegram_proxy_url")
+    @classmethod
+    def valid_telegram_proxy(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value():
+            return value
+        try:
+            url = urlsplit(value.get_secret_value())
+            valid = (
+                url.scheme in {"http", "socks4", "socks5"}
+                and url.hostname
+                and url.port
+                and url.path in {"", "/"}
+                and not url.query
+                and not url.fragment
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError(
+                "TELEGRAM_PROXY_URL must be an HTTP/SOCKS proxy URL with host and port"
+            )
+        return value
 
     @property
     def admin_ids(self) -> set[int]:

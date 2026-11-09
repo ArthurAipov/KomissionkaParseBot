@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from aiogram import Bot, Dispatcher, F, Router
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import (
     TelegramAPIError,
     TelegramBadRequest,
@@ -474,7 +475,10 @@ async def run():
                 "User-Agent": config.crawler_user_agent,
             },
         ) as photo_client,
-        Bot(token) as bot,
+        Bot(
+            token,
+            session=AiohttpSession(proxy=config.telegram_proxy_url.get_secret_value() or None),
+        ) as bot,
     ):
         bot.session.middleware(TelegramLimiter())
         api = Api(api_client)
