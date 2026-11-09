@@ -1,0 +1,16 @@
+.git
+.venv
+.env
+.env.*
+*.dump
+*.dump.*
+*.pem
+*.key
+__pycache__
+.pytest_cache
+.ruff_cache
+tests
+.media-cache
+backups
+.backups
+compose.temporary.yaml

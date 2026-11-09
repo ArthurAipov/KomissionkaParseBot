@@ -1,0 +1,20 @@
+User-agent: *
+Disallow: /account/
+Disallow: /cart/
+
+Disallow: /product/*
+Disallow: /callback/
+
+Disallow: /api*
+Disallow: /catalog/search*
+Disallow: /*?
+
+User-Agent: AhrefsBot
+Disallow: /
+
+User-Agent: MJ12bot
+Disallow: /
+
+Disallow: /*?
+
+Sitemap: https://komissionki.ru/sitemap.xml

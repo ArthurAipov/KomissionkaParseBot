@@ -1,0 +1,108 @@
+name: komissionki-watcher
+x-app: &app
+  image: komissionki-watcher:0.1.0
+  build: .
+  env_file: .env
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 40s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      BACKUPS_DIR: /app/backups
+    volumes:
+      - backups:/app/backups
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.worker"]
+    environment:
+      BACKUPS_DIR: /app/backups
+      HOST_DISK_PATH: /host-workspace
+    volumes:
+      - backups:/app/backups
+      - .:/host-workspace:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+  bot:
+    <<: *app
+    command: ["python", "-m", "app.bot"]
+    environment:
+      PHOTO_CACHE_DIR: /app/media-cache
+    volumes:
+      - photo_cache:/app/media-cache
+    depends_on:
+      api:
+        condition: service_healthy
+
+  backups:
+    image: postgres:17-alpine
+    user: "1000:1000"
+    entrypoint: ["/bin/sh", "/opt/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_INTERVAL_SECONDS: "86400"
+      BACKUP_RETENTION_DAYS: "7"
+    volumes:
+      - backups:/backups
+      - ./scripts/backup.sh:/opt/backup.sh:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+  photo_cache:
+  backups:
